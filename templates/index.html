@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Notes Assistant | dhAnush.codes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(-45deg, #0f172a, #1e1b4b, #312e81, #1e1b4b);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+            min-height: 100vh;
+            color: white;
+            font-family: 'Inter', sans-serif;
+        }
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+        }
+        .active-session {
+            border-color: #6366f1 !important;
+            background: rgba(99, 102, 241, 0.2) !important;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+        }
+        /* Markdown Styles for Clean Responses */
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 1rem; }
+        .markdown-body ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 1rem; }
+        .markdown-body p { margin-bottom: 0.75rem; }
+        .markdown-body h3 { font-weight: bold; font-size: 1.1rem; margin-top: 1rem; color: #818cf8; }
+        .markdown-body code { background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+
+    <div class="max-w-7xl mx-auto space-y-4">
+        <header class="flex justify-between items-center glass p-5">
+            <div class="flex items-center space-x-4">
+                <div class="bg-indigo-600 p-2.5 rounded-xl">
+                    <i class="fas fa-brain text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold">dhAnush<span class="text-indigo-400">.codes</span></h1>
+            </div>
+            <div id="activeSessionLabel" class="text-[10px] uppercase tracking-widest font-bold text-indigo-300 px-4 py-2 rounded-full border border-indigo-500/30">
+                Idle
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <aside class="lg:col-span-3 space-y-4">
+                <div class="glass p-5 h-[750px] flex flex-col">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4 flex items-center">
+                        <i class="fas fa-history mr-2"></i> Notes History
+                    </h2>
+                    <div id="sessionList" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        </div>
+                    <div class="mt-4 pt-4 border-t border-white/10">
+                         <button onclick="cleanupCurrent()" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 py-2 rounded-lg text-xs transition-all">
+                            Delete Selected
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="lg:col-span-9 space-y-4">
+                <div class="glass p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div id="dropZone" class="border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:border-indigo-500/50 transition-all cursor-pointer group">
+                        <input type="file" id="fileInput" multiple class="hidden">
+                        <p class="text-sm text-gray-400 group-hover:text-white transition-all">
+                            <i class="fas fa-plus-circle mr-2"></i> Upload New Notes (PDF/DOCX)
+                        </p>
+                    </div>
+                    <div class="flex items-center justify-center">
+                        <p id="status" class="text-xs text-indigo-300 italic">Select a session or upload files</p>
+                    </div>
+                </div>
+
+                <div class="glass flex flex-col h-[650px] overflow-hidden">
+                    <div id="chatWindow" class="flex-1 overflow-y-auto p-8 space-y-6">
+                        <div class="flex justify-start">
+                            <div class="bg-indigo-600/10 border border-indigo-500/20 p-5 rounded-2xl rounded-tl-none max-w-[85%] text-sm leading-relaxed">
+                                Welcome back. Pick a session from the left or upload new data to begin your study.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 bg-white/5 border-t border-white/10">
+                        <form onsubmit="event.preventDefault(); askQuestion();" class="relative">
+                            <input type="text" id="questionInput" placeholder="Ask a detailed question..." 
+                                class="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-8 pr-20 focus:outline-none focus:border-indigo-500 transition-all text-sm shadow-2xl">
+                            <button type="submit" class="absolute right-3 top-3 bg-indigo-600 p-3 rounded-xl hover:bg-indigo-500 transition-all">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let currentCollection = null;
+        const chatWindow = document.getElementById('chatWindow');
+        const sessionList = document.getElementById('sessionList');
+        const status = document.getElementById('status');
+
+        window.onload = loadSessions;
+
+        async function loadSessions() {
+            try {
+                const res = await fetch('/sessions');
+                const data = await res.json();
+                sessionList.innerHTML = '';
+                data.sessions.forEach(s => {
+                    const btn = document.createElement('div');
+                    btn.className = `p-4 rounded-xl border border-white/5 bg-white/5 cursor-pointer hover:bg-white/10 transition-all text-xs truncate flex items-center ${currentCollection === s ? 'active-session' : ''}`;
+                    btn.innerHTML = `<i class="fas fa-file-lines mr-3 text-indigo-400"></i> ${s}`;
+                    btn.onclick = () => {
+                        currentCollection = s;
+                        document.getElementById('activeSessionLabel').innerText = "Session: " + s.split('_')[1];
+                        loadSessions();
+                    };
+                    sessionList.appendChild(btn);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        dropZone.onclick = () => fileInput.click();
+
+        async function uploadFiles() {
+            if (fileInput.files.length === 0) return;
+            const formData = new FormData();
+            for (let file of fileInput.files) formData.append('files', file);
+            status.innerText = "⏳ Vectorizing notes...";
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok) {
+                status.innerText = "✅ Done";
+                currentCollection = data.collection;
+                loadSessions();
+            }
+        }
+        fileInput.onchange = uploadFiles;
+
+        async function askQuestion() {
+            const input = document.getElementById('questionInput');
+            const q = input.value.trim();
+            if(!q || !currentCollection) return;
+
+            chatWindow.innerHTML += `<div class="flex justify-end"><div class="bg-indigo-500/20 border border-white/10 p-4 rounded-2xl rounded-tr-none max-w-[80%] text-sm">${q}</div></div>`;
+            input.value = '';
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            // Typing Indicator
+            const typingId = "typing-" + Date.now();
+            chatWindow.innerHTML += `<div id="${typingId}" class="flex justify-start"><div class="bg-white/5 p-4 rounded-2xl text-xs italic text-gray-400">AI is thinking...</div></div>`;
+
+            try {
+                const res = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ question: q, collection_name: currentCollection })
+                });
+                const data = await res.json();
+                document.getElementById(typingId).remove();
+
+                // RENDER AS MARKDOWN
+                const formattedAnswer = marked.parse(data.answer);
+                chatWindow.innerHTML += `
+                    <div class="flex justify-start">
+                        <div class="bg-indigo-600/10 border border-indigo-500/20 p-5 rounded-2xl rounded-tl-none max-w-[90%] text-sm leading-relaxed markdown-body">
+                            ${formattedAnswer}
+                        </div>
+                    </div>`;
+            } catch (e) {
+                document.getElementById(typingId).innerHTML = "Error connecting to server.";
+            }
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        async function cleanupCurrent() {
+            if(!currentCollection || !confirm("Delete this session?")) return;
+            await fetch('/cleanup', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ collection_name: currentCollection })
+            });
+            location.reload();
+        }
+    </script>
+</body>
+</html>

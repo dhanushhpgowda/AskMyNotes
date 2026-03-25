@@ -1,0 +1,9 @@
+flask
+flask-cors
+pymilvus
+sentence-transformers
+langchain-google-genai
+langchain
+pypdf
+python-docx
+python-dotenv
